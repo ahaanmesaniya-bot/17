@@ -232,7 +232,6 @@ class Store(context: Context) {
     // game player hooks
     var gameView: WebView? = null
     @Volatile var paused = false
-    var legal by mutableStateOf<String?>(null)
     /** Links set from the admin panel (games.json: privacyUrl / termsUrl / aboutUrl). Empty = not set. */
     var privacyUrl by mutableStateOf("")
     var termsUrl by mutableStateOf("")

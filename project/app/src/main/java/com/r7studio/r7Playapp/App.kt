@@ -102,7 +102,6 @@ fun R7App(store: Store) {
                 BottomNav(store)
             }
             GameLayer(store)
-            LegalLayer(store)
             ConfirmClearLayer(store)
             OfflineOverlay(store)
             ToastLayer(store)

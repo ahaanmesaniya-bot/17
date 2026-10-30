@@ -1,0 +1,103 @@
+name: Build R7 Play
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM=$(command -v sdkmanager)
+          yes | "$SDKM" --licenses > /dev/null || true
+
+      # App fonts (Poppins + Fredoka, open-source SIL OFL). If a download fails the app
+      # simply uses the phone's default font.
+      - name: Download fonts
+        run: |
+          mkdir -p app/src/main/assets/fonts
+          B=https://github.com/google/fonts/raw/main/ofl
+          curl -fsSL --retry 3 -o app/src/main/assets/fonts/Poppins-Regular.ttf  $B/poppins/Poppins-Regular.ttf  || true
+          curl -fsSL --retry 3 -o app/src/main/assets/fonts/Poppins-Medium.ttf   $B/poppins/Poppins-Medium.ttf   || true
+          curl -fsSL --retry 3 -o app/src/main/assets/fonts/Poppins-SemiBold.ttf $B/poppins/Poppins-SemiBold.ttf || true
+          curl -fsSL --retry 3 -o app/src/main/assets/fonts/Fredoka.ttf "$B/fredoka/Fredoka%5Bwdth%2Cwght%5D.ttf" || true
+          ls -la app/src/main/assets/fonts
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      # OPTIONAL: if the 4 GitHub secrets exist (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS,
+      # KEY_PASSWORD) the release is signed with your key. Without them the build still works
+      # and gives an UNSIGNED APK that you can test and sign yourself later.
+      - name: Prepare signing key (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          SECRET_STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          SECRET_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SECRET_KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$SECRET_STORE_PASS" ] && [ -n "$SECRET_KEY_ALIAS" ] && [ -n "$SECRET_KEY_PASS" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "::add-mask::$SECRET_STORE_PASS"
+            echo "::add-mask::$SECRET_KEY_PASS"
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=$SECRET_STORE_PASS" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=$SECRET_KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=$SECRET_KEY_PASS" >> "$GITHUB_ENV"
+            echo "SIGNED=yes" >> "$GITHUB_ENV"
+          else
+            echo "No signing secrets: building an unsigned release."
+            echo "SIGNED=no" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build release APK and AAB
+        run: gradle :app:assembleRelease :app:bundleRelease --no-daemon --stacktrace
+
+      # Unsigned build only: make a throw-away test copy that installs on a phone.
+      - name: Make installable test APK (unsigned build only)
+        if: env.SIGNED == 'no'
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          TP=$(openssl rand -hex 12)
+          keytool -genkeypair -keystore "$RUNNER_TEMP/test.jks" -alias test -keyalg RSA -keysize 2048 \
+            -validity 3650 -storepass "$TP" -keypass "$TP" -dname "CN=R7 Play Test"
+          mkdir -p test-out
+          SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          "$BT/zipalign" -f -p 4 "$SRC" test-out/aligned.apk
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/test.jks" --ks-key-alias test \
+            --ks-pass "pass:$TP" --key-pass "pass:$TP" --out test-out/R7Play-test.apk test-out/aligned.apk
+          rm test-out/aligned.apk
+
+      - uses: actions/upload-artifact@v4
+        if: env.SIGNED == 'no'
+        with:
+          name: R7Play-test-apk-installable
+          path: test-out/R7Play-test.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: R7Play-apk-release
+          path: app/build/outputs/apk/release/*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: R7Play-aab-release
+          path: app/build/outputs/bundle/release/*.aab
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: R7Play-mapping
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore

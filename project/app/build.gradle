@@ -1,0 +1,93 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+// ===== Version: change ONLY here for every new Play Store release =====
+def r7VersionCode = 2
+def r7VersionName = "1.1"
+
+android {
+    namespace 'com.r7studio.r7Playapp'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.r7studio.r7Playapp"
+        minSdk 24
+        targetSdk 36
+        versionCode r7VersionCode
+        versionName r7VersionName
+    }
+
+    // Release signing: ONLY from environment variables (no password or key file in the repo).
+    def ksPath = System.getenv("KEYSTORE_PATH")
+    def ksPass = System.getenv("KEYSTORE_PASSWORD")
+    def ksAlias = System.getenv("KEY_ALIAS")
+    def keyPass = System.getenv("KEY_PASSWORD")
+    def canSign = ksPath && ksPass && ksAlias && keyPass && new File(ksPath).exists()
+
+    signingConfigs {
+        release {
+            if (canSign) {
+                storeFile file(ksPath)
+                storePassword ksPass
+                keyAlias ksAlias
+                keyPassword keyPass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (canSign) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        compose true
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+    def composeBom = platform('androidx.compose:compose-bom:2025.05.01')
+    implementation composeBom
+
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.foundation:foundation'
+    implementation 'androidx.compose.animation:animation'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+
+    implementation 'androidx.activity:activity-compose:1.10.1'
+    implementation 'androidx.core:core-ktx:1.16.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+    implementation 'io.coil-kt:coil-compose:2.7.0'
+}

@@ -157,9 +157,9 @@ fun GameLayer(store: Store) {
 fun SplashOverlay() {
     var show by remember { mutableStateOf(true) }
     val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { a.animateTo(1f, tween(450)) }
+    LaunchedEffect(Unit) { a.snapTo(1f) }
     LaunchedEffect(Unit) {
-        delay(2000)
+        delay(2200)
         show = false
     }
     AnimatedVisibility(
@@ -179,7 +179,7 @@ fun SplashOverlay() {
                 painter = painterResource(R.drawable.splash_logo),
                 contentDescription = "R7 Studio",
                 modifier = Modifier
-                    .width(side * 0.43f)
+                    .width(156.dp)
                     .aspectRatio(720f / 672f)
                     .graphicsLayer { alpha = a.value }
             )

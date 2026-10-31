@@ -215,6 +215,10 @@ private fun buildGame(
     val chrome = GameChrome(container, web, store)
     web.webChromeClient = chrome
     web.webViewClient = object : WebViewClient() {
+        // games packed inside the app are served from the APK (works with no internet)
+        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
+            OfflineGames.serve(ctx, request?.url)
+
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val req = request ?: return true
             val u = req.url
@@ -312,7 +316,7 @@ fun GamePlayer(store: Store, game: Game) {
     LaunchedEffect(game.id, loading) {
         while (loading) {
             delay(1500)
-            if (!store.isOnline() && !store.gameFail) {
+            if (!store.isOnline() && !store.gameFail && !OfflineGames.isLocalUrl(game.url)) {
                 store.gameNetFail()
                 holderRef[0]?.web?.let {
                     it.stopLoading()

@@ -56,7 +56,6 @@ fun R7App(store: Store) {
 
     // first load + offline checks + live refresh (same timings as the HTML app)
     LaunchedEffect(Unit) {
-        if (!store.isOnline()) store.offline = true
         store.load()
     }
     // coming back to the app (or turning the screen on) -> refresh the games list at once

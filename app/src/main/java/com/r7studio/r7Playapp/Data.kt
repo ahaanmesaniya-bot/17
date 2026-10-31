@@ -148,7 +148,8 @@ private fun parseGames(arr: JSONArray): List<Game> {
             )
         )
     }
-    return out
+    // games packed inside the app run offline with their own icon / banner
+    return out.map { OfflineGames.localize(it) }
 }
 
 private suspend fun httpGet(url: String, timeoutMs: Int): String? = withContext(Dispatchers.IO) {
@@ -410,6 +411,8 @@ class Store(context: Context) {
         gameFail = false
         gameFailCount = 0
         game = null
+        // back on the home screen the offline games are still playable, so no blocking dialog there
+        if (games.isNotEmpty()) offline = false
     }
 
     /** returns true if the game was added to favorites */
@@ -551,7 +554,11 @@ class Store(context: Context) {
         loading = true
         try {
             val raw = httpGet(GITHUB_URL + "?t=" + System.currentTimeMillis(), 8000)
-            if (raw == null) dataError = ""
+            if (raw == null) {
+                dataError = ""
+                // first start without internet and no saved list: show the offline games built into the app
+                if (games.isEmpty()) games = OfflineGames.builtinGames()
+            }
             if (raw != null && applyRaw(raw)) {
                 lastRaw = raw
                 prefs.edit().putString("r7raw", raw).apply()
@@ -595,8 +602,14 @@ class Store(context: Context) {
                 load()
             }
         } else {
-            offline = true
-            if (manual) shake++
+            // the No Internet dialog is only for online games (or when there is nothing to show at all);
+            // games packed inside the app work without internet
+            val g = game
+            val needsNet = games.isEmpty() || (g != null && !OfflineGames.isLocalUrl(g.url))
+            if (needsNet || offline) {
+                offline = true
+                if (manual) shake++
+            }
         }
     }
 }

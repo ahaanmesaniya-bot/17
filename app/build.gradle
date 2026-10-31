@@ -13,7 +13,7 @@ android {
     compileSdk 36
 
     defaultConfig {
-        applicationId "com.r7studio.r7Playapp"
+        applicationId "com.r7studio.r7Playapp1"
         minSdk 24
         targetSdk 36
         versionCode r7VersionCode

@@ -1,6 +1,6 @@
 # R7 Play - Google Play Store par approve karwane ki guide
 
-App ka package: `com.r7studio.r7Playapp`  |  Naam: R7 Play  |  Poora native Kotlin (Jetpack Compose) UI.
+App ka package: `com.r7studio.r7Playapp1`  |  Naam: R7 Play  |  Poora native Kotlin (Jetpack Compose) UI.
 Sirf games khelte waqt (game ke andar) ek WebView use hota hai, kyunki aapke games web games hain.
 
 ## 1. Build se pehle (zaroori)

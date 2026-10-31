@@ -51,6 +51,8 @@ object R7Images {
 fun cleanImageUrl(raw: String): String {
     var u = raw.trim()
     if (u.isEmpty()) return ""
+    // icons / banners packed inside the app (offline games)
+    if (u.startsWith("file:///android_asset/")) return u
     if (u.startsWith("//")) u = "https:$u"
     if (u.startsWith("http://")) u = "https://" + u.removePrefix("http://")
     if (!u.startsWith("https://")) return ""

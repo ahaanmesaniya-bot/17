@@ -553,7 +553,18 @@ class Store(context: Context) {
         if (loading) return
         loading = true
         try {
-            val raw = httpGet(GITHUB_URL + "?t=" + System.currentTimeMillis(), 8000)
+            // No internet and nothing saved yet (very first start): show the offline games built into
+            // the app AT ONCE, no waiting for a network timeout. They are replaced by the real list
+            // as soon as the internet is back (sync() does that).
+            val online = isOnline()
+            if (!online && games.isEmpty()) {
+                games = OfflineGames.builtinGames()
+                dataError = ""
+                loaded = true
+            }
+            val raw = if (online) {
+                httpGet(GITHUB_URL + "?t=" + System.currentTimeMillis(), if (games.isEmpty()) 4000 else 8000)
+            } else null
             if (raw == null) {
                 dataError = ""
                 // first start without internet and no saved list: show the offline games built into the app

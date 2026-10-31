@@ -179,8 +179,8 @@ fun SplashOverlay() {
                 painter = painterResource(R.drawable.splash_logo),
                 contentDescription = "R7 Studio",
                 modifier = Modifier
-                    .width(156.dp)
-                    .aspectRatio(720f / 672f)
+                    .width(200.dp)
+                    .aspectRatio(537f / 500f)
                     .graphicsLayer { alpha = a.value }
             )
         }

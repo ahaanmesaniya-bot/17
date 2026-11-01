@@ -563,7 +563,7 @@ class Store(context: Context) {
                 loaded = true
             }
             val raw = if (online) {
-                httpGet(GITHUB_URL + "?t=" + System.currentTimeMillis(), if (games.isEmpty()) 4000 else 8000)
+                httpGet(GITHUB_URL + "?t=" + System.currentTimeMillis(), if (games.isEmpty()) 2500 else 8000)
             } else null
             if (raw == null) {
                 dataError = ""

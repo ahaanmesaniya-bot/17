@@ -193,6 +193,9 @@ private fun buildGame(
     s.allowContentAccess = false
     s.allowFileAccessFromFileURLs = false
     s.allowUniversalAccessFromFileURLs = false
+    // Games packed inside the app never need the internet: block the network for them, so a font / CDN /
+    // tracker request inside the page can never wait for (or fail because of) a missing connection.
+    s.blockNetworkLoads = OfflineGames.isLocalUrl(game.url)
     s.setSupportZoom(false)
     s.builtInZoomControls = false
     s.textZoom = 100

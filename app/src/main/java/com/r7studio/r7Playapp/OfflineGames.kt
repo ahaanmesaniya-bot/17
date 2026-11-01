@@ -71,7 +71,8 @@ object OfflineGames {
         if (u == null) return null
         if (!u.scheme.equals("https", true) || !u.host.equals(HOST, true)) return null
         val p = u.path ?: return null
-        if (!p.startsWith("/games/")) return null
+        // anything else on our own fake host (favicon, fonts ...) must never go to the real network
+        if (!p.startsWith("/games/")) return notFound()
         val name = p.removePrefix("/games/")
         // only the known game pages can be opened (no other file of the APK)
         if (all.none { it.page == name }) return notFound()

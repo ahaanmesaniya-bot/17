@@ -149,7 +149,7 @@ private fun parseGames(arr: JSONArray): List<Game> {
         )
     }
     // games packed inside the app run offline with their own icon / banner
-    return out.map { OfflineGames.localize(it) }
+    return OfflineGames.ensureAll(out.map { OfflineGames.localize(it) })
 }
 
 private suspend fun httpGet(url: String, timeoutMs: Int): String? = withContext(Dispatchers.IO) {

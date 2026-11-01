@@ -30,9 +30,9 @@ object OfflineGames {
     val all = listOf(
         Local("Block Puzzle", "Puzzle", "block_puzzle.html", listOf("blockpuzzle")),
         Local("Hill Adventure", "Racing", "hill_adventure.html", listOf("hilladventure")),
-        Local("Nut Sort", "Puzzle", "nut_sort.html", listOf("nutsort")),
+        Local("Nut Sort", "Puzzle", "nut_sort.html", listOf("nutsort", "nutbolt", "nutsandbolts", "nutandbolt", "boltnut", "boltsort")),
         Local("Math Master", "Brain", "math_master.html", listOf("mathmaster", "mathgame")),
-        Local("Tap Away Arrows", "Puzzle", "tap_away_arrows.html", listOf("tapaway", "taparrows"))
+        Local("Tap Away Arrows", "Puzzle", "tap_away_arrows.html", listOf("tapaway", "taparrow", "arrowpuzzle", "aeropuzzle", "arrowaway", "arrowsaway", "arrowescape", "tapaero"))
     )
 
     private fun norm(s: String) = s.lowercase().filter { it in 'a'..'z' || it in '0'..'9' }
@@ -64,6 +64,18 @@ object OfflineGames {
             isNew = false,
             plays = 0
         )
+    }
+
+    /**
+     * The offline games live inside the app, so they always stay in the list, even when the admin panel
+     * deletes / hides them. If the admin still lists one, the admin's entry is used (featured, new, order ...).
+     */
+    fun ensureAll(list: List<Game>): List<Game> {
+        val out = ArrayList(list)
+        for (b in builtinGames()) {
+            if (out.none { it.url.trim().equals(b.url, ignoreCase = true) }) out.add(b)
+        }
+        return out
     }
 
     /** Called from the WebView: gives the bundled game page for https://appassets.androidplatform.net/games/... */

@@ -798,7 +798,7 @@ var ASSETS={"add": "data:image/webp;base64,UklGRkwgAABXRUJQVlA4WAoAAAAQAAAAawIAu
     if (save.inv["undo"] > 0) { if (payFor("undo")) doRevive(); return; }
     if (window.R7Ads) {
       if (R7Ads.hasRewarded()) { R7Ads.showRewarded("revive"); }
-      else { toast("Video abhi ready nahi hai, thodi der baad try karo"); }
+      else { toast((R7Ads.isOnline && !R7Ads.isOnline()) ? "कृपया अपना इंटरनेट कनेक्शन चेक करें।" : "Ad अभी उपलब्ध नहीं है। कृपया थोड़ी देर बाद कोशिश करें।"); }
       return;
     }
     if (!payFor("undo")) return;

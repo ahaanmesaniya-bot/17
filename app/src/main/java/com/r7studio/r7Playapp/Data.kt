@@ -26,8 +26,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 const val GITHUB_URL = "https://raw.githubusercontent.com/ahaanmesaniya-bot/r7-database/main/games.json"
-const val PLAY_LINK = "https://play.google.com/store/apps/details?id=com.r7studio.r7Playapp"
+/** Play Store link of THIS build: always built from the real applicationId (app/build.gradle) */
+val PLAY_LINK: String get() = "https://play.google.com/store/apps/details?id=" + BuildConfig.APPLICATION_ID
 const val TRENDING_ICON = "https://res.cloudinary.com/so9phvfy/image/upload/v1790938146/1000052451.png"
+
+/** returning to the app after at least this long -> games list is checked once more */
+const val RESYNC_MS = 10 * 60 * 1000L
 
 val TAB_ORDER = listOf("home", "explore", "top", "recent", "settings")
 
@@ -54,6 +58,9 @@ val TX: Map<String, Map<String, String>> = mapOf(
         "gameCrash" to "The game ran out of memory and closed. Close other apps and try again.",
         "oldWeb" to "Update \"Android System WebView\" in Play Store so games and ads work properly.",
         "adWait" to "Ad is not ready yet. Please try again in a moment.",
+        "adNA" to "Ad is not available right now. Please try again after a while.",
+        "chkNet" to "Please check your internet connection.",
+        "adPriv" to "Ad privacy settings",
         "adSkip" to "Watch the full video to get the reward."
     ),
     "hi" to mapOf(
@@ -78,6 +85,9 @@ val TX: Map<String, Map<String, String>> = mapOf(
         "gameCrash" to "मेमोरी कम पड़ने से गेम बंद हो गया। दूसरे ऐप बंद करके फिर कोशिश करें।",
         "oldWeb" to "गेम और विज्ञापन सही चलें, इसके लिए Play Store में \"Android System WebView\" अपडेट करें।",
         "adWait" to "विज्ञापन अभी तैयार नहीं है। थोड़ी देर बाद फिर कोशिश करें।",
+        "adNA" to "Ad अभी उपलब्ध नहीं है। कृपया थोड़ी देर बाद कोशिश करें।",
+        "chkNet" to "कृपया अपना इंटरनेट कनेक्शन चेक करें।",
+        "adPriv" to "विज्ञापन गोपनीयता सेटिंग",
         "adSkip" to "इनाम पाने के लिए पूरा वीडियो देखें।"
     )
 )
@@ -246,6 +256,10 @@ class Store(context: Context) {
 
     val seen = HashSet<String>()
     private var lastRaw = ""
+    /** when games.json was last requested (SystemClock.elapsedRealtime) */
+    private var lastFetchAt = 0L
+    /** true until a real games.json (or a saved copy of it) has been received */
+    val needsFirstLoad: Boolean get() = lastRaw.isEmpty()
     private var loading = false
     private var burstId = 0
 
@@ -479,7 +493,7 @@ class Store(context: Context) {
 
     fun rateApp() {
         try {
-            val i = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.r7studio.r7Playapp"))
+            val i = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + BuildConfig.APPLICATION_ID))
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(i)
         } catch (e: Exception) {
@@ -563,6 +577,7 @@ class Store(context: Context) {
             // the app AT ONCE, no waiting for a network timeout. They are replaced by the real list
             // as soon as the internet is back (sync() does that).
             val online = isOnline()
+            if (online) lastFetchAt = android.os.SystemClock.elapsedRealtime()
             if (!online && games.isEmpty()) {
                 games = OfflineGames.builtinGames()
                 dataError = ""
@@ -593,12 +608,24 @@ class Store(context: Context) {
         load()
     }
 
-    /** silent refresh while the app is open (every 3 sec, and instantly when the app is opened again) */
-    suspend fun sync() {
+    /**
+     * One quiet refresh. There is NO timer any more: the list is fetched once when the app starts (load())
+     * and, at most, again when the user comes back to the app after RESYNC_MS. Never while a game is open.
+     * The saved copy stays untouched unless the new data is valid and different.
+     */
+    suspend fun syncIfStale() {
+        if (game != null) return
+        if (android.os.SystemClock.elapsedRealtime() - lastFetchAt < RESYNC_MS) return
+        if (!isOnline()) return
+        sync()
+    }
+
+    private suspend fun sync() {
         if (games.isEmpty()) {
             load()
             return
         }
+        lastFetchAt = android.os.SystemClock.elapsedRealtime()
         val raw = httpGet(GITHUB_URL + "?t=" + System.currentTimeMillis(), 8000) ?: return
         if (raw == lastRaw) return
         if (applyRaw(raw)) {

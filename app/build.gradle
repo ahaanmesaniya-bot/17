@@ -5,19 +5,48 @@ plugins {
 }
 
 // ===== AdMob IDs: paste your REAL ids here (only place to change) =====
-// Debug builds ALWAYS use Google's official TEST ids. Release builds use the real ids below;
-// while any of the 4 real ids is empty, release also uses the TEST ids (safe: no invalid-traffic risk).
-def ADMOB_REAL_APP_ID = ""           // ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
-def ADMOB_REAL_BANNER = ""           // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
-def ADMOB_REAL_INTERSTITIAL = ""     // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
-def ADMOB_REAL_REWARDED = ""         // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+// Debug builds ALWAYS use Google's official TEST ids. Release builds use ONLY the real ids below.
+// A release build (assembleRelease / bundleRelease) FAILS with a clear message if any real id is empty,
+// is a placeholder, has a wrong format, is a Google TEST id, or belongs to a different AdMob publisher.
+def ADMOB_REAL_APP_ID = "ca-app-pub-8981669587444390~9685064037" // ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
+def ADMOB_REAL_BANNER = "ca-app-pub-8981669587444390/8479793577" // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+def ADMOB_REAL_INTERSTITIAL = "ca-app-pub-8981669587444390/5277693971" // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+def ADMOB_REAL_REWARDED = "ca-app-pub-8981669587444390/8040809878" // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
 
 def ADMOB_TEST_APP_ID = "ca-app-pub-3940256099942544~3347511713"
 def ADMOB_TEST_BANNER = "ca-app-pub-3940256099942544/6300978111"
 def ADMOB_TEST_INTERSTITIAL = "ca-app-pub-3940256099942544/1033173712"
 def ADMOB_TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917"
-def admobUseReal = (ADMOB_REAL_APP_ID != "" && ADMOB_REAL_BANNER != "" &&
-        ADMOB_REAL_INTERSTITIAL != "" && ADMOB_REAL_REWARDED != "")
+
+// ---- Release safety gate: no placeholder / test / malformed id can reach a release build ----
+def admobProblems = []
+def admobCheck = { String label, String value, String re ->
+    if (value == null || value.trim().isEmpty()) {
+        admobProblems << "${label} is empty"
+    } else if (value.contains("XXXX") || value.contains("YYYY") || value.contains("ZZZZ")) {
+        admobProblems << "${label} is still a placeholder (${value})"
+    } else if (!value.matches(re)) {
+        admobProblems << "${label} has a wrong format (${value})"
+    } else if (value.contains("3940256099942544")) {
+        admobProblems << "${label} is a Google TEST id (${value}) - not allowed in release"
+    }
+}
+admobCheck("ADMOB_REAL_APP_ID", ADMOB_REAL_APP_ID, '^ca-app-pub-\\d{16}~\\d{10}$')
+admobCheck("ADMOB_REAL_BANNER", ADMOB_REAL_BANNER, '^ca-app-pub-\\d{16}/\\d{10}$')
+admobCheck("ADMOB_REAL_INTERSTITIAL", ADMOB_REAL_INTERSTITIAL, '^ca-app-pub-\\d{16}/\\d{10}$')
+admobCheck("ADMOB_REAL_REWARDED", ADMOB_REAL_REWARDED, '^ca-app-pub-\\d{16}/\\d{10}$')
+if (admobProblems.isEmpty()) {
+    def pubs = [ADMOB_REAL_APP_ID, ADMOB_REAL_BANNER, ADMOB_REAL_INTERSTITIAL, ADMOB_REAL_REWARDED]
+            .collect { it.substring("ca-app-pub-".length(), "ca-app-pub-".length() + 16) }.unique()
+    if (pubs.size() != 1) admobProblems << "the 4 real ids belong to different publishers: ${pubs}"
+}
+gradle.taskGraph.whenReady { graph ->
+    def releaseBuild = graph.allTasks.any { it.path.startsWith(":app:") && it.name.toLowerCase().contains("release") }
+    if (releaseBuild && !admobProblems.isEmpty()) {
+        throw new GradleException("RELEASE BLOCKED - AdMob ids in app/build.gradle are not valid:\n  - " +
+                admobProblems.join("\n  - "))
+    }
+}
 
 // ===== Version: change ONLY here for every new Play Store release =====
 def r7VersionCode = 2
@@ -61,10 +90,11 @@ android {
             buildConfigField "String", "ADMOB_REWARDED", "\"${ADMOB_TEST_REWARDED}\""
         }
         release {
-            manifestPlaceholders = [admobAppId: admobUseReal ? ADMOB_REAL_APP_ID : ADMOB_TEST_APP_ID]
-            buildConfigField "String", "ADMOB_BANNER", "\"${admobUseReal ? ADMOB_REAL_BANNER : ADMOB_TEST_BANNER}\""
-            buildConfigField "String", "ADMOB_INTERSTITIAL", "\"${admobUseReal ? ADMOB_REAL_INTERSTITIAL : ADMOB_TEST_INTERSTITIAL}\""
-            buildConfigField "String", "ADMOB_REWARDED", "\"${admobUseReal ? ADMOB_REAL_REWARDED : ADMOB_TEST_REWARDED}\""
+            // real ids only (validated by the release safety gate above)
+            manifestPlaceholders = [admobAppId: ADMOB_REAL_APP_ID]
+            buildConfigField "String", "ADMOB_BANNER", "\"${ADMOB_REAL_BANNER}\""
+            buildConfigField "String", "ADMOB_INTERSTITIAL", "\"${ADMOB_REAL_INTERSTITIAL}\""
+            buildConfigField "String", "ADMOB_REWARDED", "\"${ADMOB_REAL_REWARDED}\""
             if (canSign) {
                 signingConfig signingConfigs.release
             }
@@ -117,6 +147,9 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
     implementation 'io.coil-kt:coil-compose:2.7.0'
 
-    // Google AdMob (includes the UMP consent SDK)
-    implementation 'com.google.android.gms:play-services-ads:23.6.0'
+    // secure JS <-> Kotlin channel with origin rules (online games' ads bridge)
+    implementation 'androidx.webkit:webkit:1.12.1'
+
+    // Google AdMob (Google Mobile Ads SDK 25.x, includes the UMP consent SDK). 25.x needs minSdk 24+ and Kotlin 2.1+.
+    implementation 'com.google.android.gms:play-services-ads:25.5.0'
 }

@@ -156,7 +156,7 @@ class GameChrome(
     }
 }
 
-class GameHolder(val container: FrameLayout, val web: WebView, val chrome: GameChrome)
+class GameHolder(val container: FrameLayout, val web: WebView, val chrome: GameChrome, val adWeb: AdWebBridge? = null)
 
 private fun isAllowedHost(store: Store, host: String?): Boolean {
     val h = host?.lowercase() ?: return false
@@ -201,8 +201,22 @@ private fun buildGame(
     s.textZoom = 100
     // Only bundled games and online games on YOUR trusted hosts (Config.AD_TRUSTED_HOSTS) may talk to the ads.
     // Every other web page gets NO bridge.
-    if (OfflineGames.adsAllowed(game.url)) {
+    var adWeb: AdWebBridge? = null
+    if (OfflineGames.isLocalUrl(game.url)) {
+        // bundled game: no network, no iframes -> the simple bridge is safe
         web.addJavascriptInterface(AdBridge(store, web), "R7Ads")
+    } else if (OfflineGames.adsAllowed(game.url)) {
+        // online game on a trusted host: ONLY the origin-checked channel (main frame of Config.AD_TRUSTED_HOSTS).
+        // No addJavascriptInterface here, so an iframe or another site can never reach the ads.
+        try {
+            val b = AdWebBridge(store)
+            if (b.install(web)) {
+                adWeb = b
+                b.injectLibrary(ctx, web)
+            }
+        } catch (e: Throwable) {
+            adWeb = null
+        }
     }
 
     // Very old "Android System WebView" (common on old phones) cannot run modern games / ads.
@@ -307,7 +321,7 @@ private fun buildGame(
     container.addView(web, FrameLayout.LayoutParams(-1, -1))
     store.gameView = web
     web.loadUrl(game.url.trim())
-    return GameHolder(container, web, chrome)
+    return GameHolder(container, web, chrome, adWeb)
 }
 
 @Composable
@@ -356,6 +370,7 @@ fun GamePlayer(store: Store, game: Game) {
             if (h != null) {
                 try {
                     h.chrome.hideIfShowing()
+                    h.adWeb?.detach()
                     (h.web.parent as? ViewGroup)?.removeView(h.web)
                     h.web.stopLoading()
                     h.web.webViewClient = WebViewClient()

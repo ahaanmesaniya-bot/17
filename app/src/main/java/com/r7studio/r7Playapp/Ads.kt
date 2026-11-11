@@ -37,19 +37,26 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * All AdMob logic in one place.
- *  - Banner        : home screen, under the hero slider
- *  - Interstitial  : after every 2nd finished game (win OR game over)
- *  - Rewarded      : "watch video" button inside a game (Math Master revive)
+ *  - Banner        : home screen, under the hero slider (loaded once, never reloaded by us)
+ *  - Interstitial  : after every 2nd finished game (bundled games) or when an online game asks for it
+ *  - Rewarded      : "watch video" button inside a game
  *
- * Ad unit ids come from BuildConfig (set in app/build.gradle: test ids until you paste real ones).
+ * Every ad kind is kept pre-loaded in the background. After an ad is used (or fails) the next one is
+ * requested automatically; failed loads retry with a growing delay (30 s, 1 m, 2 m, 4 m, 5 m max) and no
+ * request is sent while the phone is offline. Ad failures never block the game.
+ * Ad unit ids come from BuildConfig (test ids in debug, real ids in release - see app/build.gradle).
  */
 class AdManager(private val activity: Activity, private val store: Store) {
 
     companion object {
         /** show an interstitial after this many finished games */
         const val GAMES_PER_INTERSTITIAL = 2
-        private const val SHOW_DELAY_MS = 900L      // let the player see the win / game over screen first
-        private const val RETRY_MS = 30_000L        // retry after a failed load
+        private const val SHOW_DELAY_MS = 900L           // let the player see the win / game over screen first
+        private const val RETRY_BASE_MS = 30_000L
+        private const val RETRY_MAX_MS = 5 * 60_000L
+        private const val AD_MAX_AGE_MS = 55 * 60_000L   // AdMob ads expire after 1 hour: never show an old one
+        private const val MIN_INTERSTITIAL_GAP_MS = 60_000L  // at least this long between two interstitials
+        private const val KICK_MIN_GAP_MS = 15_000L      // a user tap may force a new request, not more often than this
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -57,22 +64,56 @@ class AdManager(private val activity: Activity, private val store: Store) {
     private val sdkInit = AtomicBoolean(false)
     private var destroyed = false
 
-    private var interstitial: InterstitialAd? = null
+    @Volatile private var interstitial: InterstitialAd? = null
+    @Volatile private var interstitialAt = 0L
     private var loadingInterstitial = false
-    private var rewarded: RewardedAd? = null
+    private var interstitialFails = 0
+    private var interstitialReqAt = 0L
+    private var lastInterstitialClosedAt = 0L
+
+    @Volatile private var rewarded: RewardedAd? = null
+    @Volatile private var rewardedAt = 0L
     private var loadingRewarded = false
+    private var rewardedFails = 0
+    private var rewardedReqAt = 0L
+
     private var fullscreenShowing = false
     private var finishedGames = 0
     private var lastEndAt = 0L
 
-    /** true when a rewarded video is loaded and can be shown */
-    @Volatile var rewardedReady = false
-        private set
+    private val retryInterstitial = Runnable { loadInterstitial() }
+    private val retryRewarded = Runnable { loadRewarded() }
+    private val retryBanner = Runnable { retryBannerNow() }
+
+    /** true when a rewarded video is loaded, fresh and can be shown */
+    val rewardedReady: Boolean
+        get() = rewarded != null && SystemClock.elapsedRealtime() - rewardedAt <= AD_MAX_AGE_MS
 
     /** true once the home banner has really loaded (the slot stays hidden until then) */
     var bannerLoaded by mutableStateOf(false)
         private set
     private var banner: AdView? = null
+    private var bannerFails = 0
+
+    // ad state events for the online-games bridge: (kind, "loaded" | "failed")
+    private val listeners = LinkedHashSet<(String, String) -> Unit>()
+    fun addListener(l: (String, String) -> Unit) { listeners.add(l) }
+    fun removeListener(l: (String, String) -> Unit) { listeners.remove(l) }
+    private fun emit(kind: String, event: String) {
+        for (l in listeners.toList()) {
+            try { l(kind, event) } catch (e: Throwable) { }
+        }
+    }
+
+    private fun backoff(fails: Int): Long =
+        (RETRY_BASE_MS shl (fails - 1).coerceIn(0, 4)).coerceAtMost(RETRY_MAX_MS)
+
+    fun isReady(kind: String): Boolean = when (kind) {
+        "interstitial" -> freshInterstitial() != null
+        "rewarded" -> rewardedReady
+        "banner" -> bannerLoaded
+        else -> false
+    }
 
     // ------------------------------------------------------------------ start / consent
 
@@ -122,18 +163,32 @@ class AdManager(private val activity: Activity, private val store: Store) {
             v.adUnitId = BuildConfig.ADMOB_BANNER
             v.adListener = object : AdListener() {
                 override fun onAdLoaded() {
+                    bannerFails = 0
                     bannerLoaded = true
+                    emit("banner", "loaded")
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    // AdMob keeps retrying a banner by itself when auto-refresh is on in the console
-                    main.postDelayed({ if (!destroyed && !bannerLoaded) banner?.loadAd(AdRequest.Builder().build()) }, RETRY_MS)
+                    bannerFails++
+                    emit("banner", "failed")
+                    main.removeCallbacks(retryBanner)
+                    main.postDelayed(retryBanner, backoff(bannerFails))
                 }
             }
             banner = v
-            v.loadAd(AdRequest.Builder().build())
+            if (store.isOnline()) v.loadAd(AdRequest.Builder().build())
+            else main.postDelayed(retryBanner, RETRY_BASE_MS)
         } catch (e: Throwable) {
         }
+    }
+
+    private fun retryBannerNow() {
+        if (destroyed || bannerLoaded) return
+        if (!store.isOnline()) {
+            main.postDelayed(retryBanner, RETRY_BASE_MS)   // offline: only a local check, no ad request
+            return
+        }
+        try { banner?.loadAd(AdRequest.Builder().build()) } catch (e: Throwable) { }
     }
 
     /** the one banner view, detached from any old parent so Compose can re-attach it */
@@ -145,22 +200,43 @@ class AdManager(private val activity: Activity, private val store: Store) {
 
     // ------------------------------------------------------------------ interstitial
 
+    private fun freshInterstitial(): InterstitialAd? {
+        val ad = interstitial ?: return null
+        if (SystemClock.elapsedRealtime() - interstitialAt > AD_MAX_AGE_MS) {
+            interstitial = null          // expired: throw it away and load a new one
+            loadInterstitial()
+            return null
+        }
+        return ad
+    }
+
     private fun loadInterstitial() {
         if (destroyed || interstitial != null || loadingInterstitial || !sdkInit.get()) return
+        main.removeCallbacks(retryInterstitial)
+        if (!store.isOnline()) {
+            main.postDelayed(retryInterstitial, RETRY_BASE_MS)   // offline: no request, check again later
+            return
+        }
         loadingInterstitial = true
+        interstitialReqAt = SystemClock.elapsedRealtime()
         try {
             InterstitialAd.load(
                 activity, BuildConfig.ADMOB_INTERSTITIAL, AdRequest.Builder().build(),
                 object : InterstitialAdLoadCallback() {
                     override fun onAdLoaded(ad: InterstitialAd) {
                         loadingInterstitial = false
+                        interstitialFails = 0
                         interstitial = ad
+                        interstitialAt = SystemClock.elapsedRealtime()
+                        emit("interstitial", "loaded")
                     }
 
                     override fun onAdFailedToLoad(error: LoadAdError) {
                         loadingInterstitial = false
                         interstitial = null
-                        main.postDelayed({ loadInterstitial() }, RETRY_MS)
+                        interstitialFails++
+                        emit("interstitial", "failed")
+                        main.postDelayed(retryInterstitial, backoff(interstitialFails))
                     }
                 }
             )
@@ -169,7 +245,15 @@ class AdManager(private val activity: Activity, private val store: Store) {
         }
     }
 
-    /** called (through AdBridge) every time a game is won or lost */
+    /** the user asked for an ad again after a failure: try a new request now (not more often than every 15 s) */
+    private fun kickInterstitial() {
+        if (loadingInterstitial || interstitial != null) return
+        if (SystemClock.elapsedRealtime() - interstitialReqAt < KICK_MIN_GAP_MS) return
+        main.removeCallbacks(retryInterstitial)
+        loadInterstitial()
+    }
+
+    /** called (through AdBridge) every time a bundled game is won or lost */
     fun onGameEnd() {
         // a game can report its end twice (own call + watcher): count it once
         val now = SystemClock.elapsedRealtime()
@@ -177,28 +261,44 @@ class AdManager(private val activity: Activity, private val store: Store) {
         lastEndAt = now
         finishedGames++
         if (finishedGames % GAMES_PER_INTERSTITIAL != 0) return
-        main.postDelayed({ showInterstitial() }, SHOW_DELAY_MS)
+        main.postDelayed({
+            if (!destroyed && store.game != null && !store.paused) showInterstitialNow { }
+        }, SHOW_DELAY_MS)
     }
 
-    private fun showInterstitial() {
-        if (destroyed || fullscreenShowing) return
-        if (store.game == null || store.paused) return          // player already left the game
-        val ad = interstitial
+    /**
+     * Shows the interstitial if one is ready. [result] is called once, on the main thread:
+     * "closed" | "unavailable" | "offline" | "too_soon" | "busy".
+     */
+    fun showInterstitialNow(result: (String) -> Unit) {
+        if (destroyed || fullscreenShowing) { result("busy"); return }
+        val now = SystemClock.elapsedRealtime()
+        if (lastInterstitialClosedAt != 0L && now - lastInterstitialClosedAt < MIN_INTERSTITIAL_GAP_MS) {
+            result("too_soon"); return
+        }
+        val ad = freshInterstitial()
         if (ad == null) {
-            loadInterstitial()
+            if (!store.isOnline()) { result("offline"); return }
+            kickInterstitial()
+            result("unavailable")
             return
         }
+        var done = false
+        fun finish(s: String) { if (!done) { done = true; result(s) } }
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 fullscreenShowing = false
                 interstitial = null
+                lastInterstitialClosedAt = SystemClock.elapsedRealtime()
                 loadInterstitial()
+                finish("closed")
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 fullscreenShowing = false
                 interstitial = null
                 loadInterstitial()
+                finish("unavailable")
             }
         }
         fullscreenShowing = true
@@ -208,6 +308,7 @@ class AdManager(private val activity: Activity, private val store: Store) {
             fullscreenShowing = false
             interstitial = null
             loadInterstitial()
+            finish("unavailable")
         }
     }
 
@@ -215,22 +316,31 @@ class AdManager(private val activity: Activity, private val store: Store) {
 
     private fun loadRewarded() {
         if (destroyed || rewarded != null || loadingRewarded || !sdkInit.get()) return
+        main.removeCallbacks(retryRewarded)
+        if (!store.isOnline()) {
+            main.postDelayed(retryRewarded, RETRY_BASE_MS)   // offline: no request, check again later
+            return
+        }
         loadingRewarded = true
+        rewardedReqAt = SystemClock.elapsedRealtime()
         try {
             RewardedAd.load(
                 activity, BuildConfig.ADMOB_REWARDED, AdRequest.Builder().build(),
                 object : RewardedAdLoadCallback() {
                     override fun onAdLoaded(ad: RewardedAd) {
                         loadingRewarded = false
+                        rewardedFails = 0
                         rewarded = ad
-                        rewardedReady = true
+                        rewardedAt = SystemClock.elapsedRealtime()
+                        emit("rewarded", "loaded")
                     }
 
                     override fun onAdFailedToLoad(error: LoadAdError) {
                         loadingRewarded = false
                         rewarded = null
-                        rewardedReady = false
-                        main.postDelayed({ loadRewarded() }, RETRY_MS)
+                        rewardedFails++
+                        emit("rewarded", "failed")
+                        main.postDelayed(retryRewarded, backoff(rewardedFails))
                     }
                 }
             )
@@ -239,36 +349,46 @@ class AdManager(private val activity: Activity, private val store: Store) {
         }
     }
 
+    /** the user tapped "watch video" while nothing was ready: check again now (not more often than every 15 s) */
+    private fun kickRewarded() {
+        if (loadingRewarded) return
+        if (rewarded != null && rewardedReady) return
+        rewarded = null                               // expired ad, if any
+        if (SystemClock.elapsedRealtime() - rewardedReqAt < KICK_MIN_GAP_MS) return
+        main.removeCallbacks(retryRewarded)
+        loadRewarded()
+    }
+
     /**
-     * Shows the rewarded video. [result] is called once with true (reward earned) or false
-     * (not ready / closed early). Must be called on the main thread.
+     * Shows the rewarded video. [result] is called exactly once, on the main thread:
+     * "rewarded" (Google's reward callback fired) | "skipped" (closed early) | "offline" | "unavailable" | "busy".
+     * The reward must only be given for "rewarded".
      */
-    fun showRewarded(result: (Boolean) -> Unit) {
-        val ad = rewarded
-        if (destroyed || fullscreenShowing || ad == null) {
-            store.toast(store.t("adWait"))
-            loadRewarded()
-            result(false)
+    fun showRewardedEx(result: (String) -> Unit) {
+        if (destroyed || fullscreenShowing) { result("busy"); return }
+        val ad = if (rewardedReady) rewarded else null
+        if (ad == null) {
+            if (!store.isOnline()) { result("offline"); return }
+            kickRewarded()
+            result("unavailable")
             return
         }
         var earned = false
+        var done = false
+        fun finish(s: String) { if (!done) { done = true; result(s) } }
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 fullscreenShowing = false
                 rewarded = null
-                rewardedReady = false
                 loadRewarded()
-                if (!earned) store.toast(store.t("adSkip"))
-                result(earned)
+                finish(if (earned) "rewarded" else "skipped")
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 fullscreenShowing = false
                 rewarded = null
-                rewardedReady = false
                 loadRewarded()
-                store.toast(store.t("adWait"))
-                result(false)
+                finish("unavailable")
             }
         }
         fullscreenShowing = true
@@ -277,9 +397,36 @@ class AdManager(private val activity: Activity, private val store: Store) {
         } catch (e: Throwable) {
             fullscreenShowing = false
             rewarded = null
-            rewardedReady = false
             loadRewarded()
-            result(false)
+            finish("unavailable")
+        }
+    }
+
+    /** Old callback style used by the bundled games (through AdBridge): shows the right message itself. */
+    fun showRewarded(result: (Boolean) -> Unit) {
+        showRewardedEx { status ->
+            when (status) {
+                "offline" -> store.toast(store.t("chkNet"))
+                "unavailable" -> store.toast(store.t("adNA"))
+                "skipped" -> store.toast(store.t("adSkip"))
+            }
+            result(status == "rewarded")
+        }
+    }
+
+    // ------------------------------------------------------------------ consent options (EEA / UK)
+
+    fun privacyOptionsRequired(): Boolean = try {
+        UserMessagingPlatform.getConsentInformation(activity).privacyOptionsRequirementStatus ==
+            ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
+    } catch (e: Throwable) {
+        false
+    }
+
+    fun showPrivacyOptions() {
+        try {
+            UserMessagingPlatform.showPrivacyOptionsForm(activity) { _ -> }
+        } catch (e: Throwable) {
         }
     }
 
@@ -296,6 +443,7 @@ class AdManager(private val activity: Activity, private val store: Store) {
     fun destroy() {
         destroyed = true
         main.removeCallbacksAndMessages(null)
+        listeners.clear()
         try {
             banner?.destroy()
         } catch (e: Throwable) {
@@ -347,6 +495,10 @@ class AdBridge(private val store: Store, private val web: WebView) {
 
     @JavascriptInterface
     fun hasRewarded(): Boolean = store.ads?.rewardedReady == true
+
+    /** lets a bundled game choose between the "no ad" and the "check internet" message */
+    @JavascriptInterface
+    fun isOnline(): Boolean = store.isOnline()
 
     @JavascriptInterface
     fun showRewarded(tag: String) {

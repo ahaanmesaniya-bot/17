@@ -58,20 +58,22 @@ fun R7App(store: Store) {
     LaunchedEffect(Unit) {
         store.load()
     }
-    // coming back to the app (or turning the screen on) -> refresh the games list at once
+    // coming back to the app after a long time -> check the games list once (no timer, no polling)
     LaunchedEffect(store.paused) {
-        if (!store.paused && store.isOnline()) store.sync()
+        if (!store.paused) store.syncIfStale()
+    }
+    // very first start without internet (only the built-in games are shown): one gentle try every 30 s
+    // until the real list has arrived. Stops for good after the first success - no polling after that.
+    LaunchedEffect(Unit) {
+        while (store.needsFirstLoad) {
+            delay(30_000)
+            if (!store.paused && store.game == null && store.isOnline()) store.load()
+        }
     }
     LaunchedEffect(Unit) {
         while (true) {
             delay(4000)
             if (!store.paused && store.offline) store.chkNet(false)
-        }
-    }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(3000)
-            if (!store.paused && store.isOnline()) store.sync()
         }
     }
 

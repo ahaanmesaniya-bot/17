@@ -707,6 +707,9 @@ fun SettingsScreen(store: Store) {
             item { SettingRow(store, 7, Icons.Filled.Star, store.t("rate"), onClick = { store.rateApp() }) }
             item { SettingRow(store, 8, Icons.Filled.Email, store.t("feed"), onClick = { store.sendFeedback() }) }
             item { SettingRow(store, 9, Icons.Filled.Shield, store.t("priv"), onClick = { store.openLegal("privacy") }) }
+            if (store.ads?.privacyOptionsRequired() == true) {
+                item { SettingRow(store, 13, Icons.Filled.Shield, store.t("adPriv"), onClick = { store.ads?.showPrivacyOptions() }) }
+            }
             item { SettingRow(store, 10, Icons.Filled.Description, store.t("terms"), onClick = { store.openLegal("terms") }) }
             item { SettingRow(store, 11, Icons.Filled.Info, store.t("about"), onClick = { store.openAbout() }) }
             item { SettingRow(store, 12, Icons.Filled.Info, "R7 Studio", sub = "R7 Play v$version") }

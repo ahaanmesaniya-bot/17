@@ -3,6 +3,7 @@ package com.r7studio.r7Playapp
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -62,6 +63,7 @@ class AdManager(private val activity: Activity, private val store: Store) {
     private var loadingRewarded = false
     private var fullscreenShowing = false
     private var finishedGames = 0
+    private var lastEndAt = 0L
 
     /** true when a rewarded video is loaded and can be shown */
     @Volatile var rewardedReady = false
@@ -169,6 +171,10 @@ class AdManager(private val activity: Activity, private val store: Store) {
 
     /** called (through AdBridge) every time a game is won or lost */
     fun onGameEnd() {
+        // a game can report its end twice (own call + watcher): count it once
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastEndAt < 2500) return
+        lastEndAt = now
         finishedGames++
         if (finishedGames % GAMES_PER_INTERSTITIAL != 0) return
         main.postDelayed({ showInterstitial() }, SHOW_DELAY_MS)
@@ -332,7 +338,7 @@ fun BannerSlot(store: Store) {
 class AdBridge(private val store: Store, private val web: WebView) {
     private val main = Handler(Looper.getMainLooper())
 
-    private fun isBundledPage(): Boolean = OfflineGames.isLocalUrl(web.url ?: "")
+    private fun isBundledPage(): Boolean = OfflineGames.adsAllowed(web.url ?: "")
 
     @JavascriptInterface
     fun gameEnd() {
@@ -372,7 +378,7 @@ const val GAME_END_HOOK_JS = """
   var ids = ['over','ovOver','ovWin','winM','ov'], last = 0;
   function shown(el){
     var c = el.classList;
-    if (c.contains('in') || c.contains('on') || c.contains('show')) return true;
+    if (c.contains('in') || c.contains('on') || c.contains('show')) return el.style.display !== 'none';
     return el.id === 'ov' && el.style.display === 'flex';
   }
   ids.forEach(function(id){

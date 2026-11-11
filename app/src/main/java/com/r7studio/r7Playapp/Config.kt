@@ -10,6 +10,12 @@ object Config {
     const val DEVELOPER = "R7 Studio"
     const val LAST_UPDATED = "4 October 2026"
 
+    /**
+     * ONLINE games (links in games.json) get the ads bridge (R7Ads) only if their page is on one of these
+     * hosts. Put ONLY your own domains here (exact host, https). Games packed inside the app always have it.
+     */
+    val AD_TRUSTED_HOSTS: Set<String> = setOf("ahaanmesaniya-bot.github.io")
+
     // Default legal links (used when games.json does not set privacyUrl / termsUrl / aboutUrl)
     const val PRIVACY_URL = "https://ahaanmesaniya-bot.github.io/Privacy-policy/privacy-policy-en.html"
     const val ABOUT_URL = "https://ahaanmesaniya-bot.github.io/About-us/about-en.html"

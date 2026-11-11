@@ -597,10 +597,18 @@ async function move(a, b, fromRedo){
   if(ep !== epoch) return;
   busy = false; celebrate(); refreshUI(); saveGame(); checkWin(); drain();
 }
+/* ---- R7 Play ads: an item is at 0 -> watch a rewarded video to get +1 (then the action runs) ---- */
+const r7Pending = {};
+window.r7AdResult = (tag, ok) => { const f = r7Pending[tag]; delete r7Pending[tag]; if(f) f(ok); };
+function r7NeedItem(key, retry){
+  if(!window.R7Ads || !R7Ads.hasRewarded()) return false;   // no video ready -> normal shop
+  r7Pending[key] = ok => { if(ok){ inv[key]++; saveInv(); refreshUI(); toast('+1 mila! \u{1F381}'); setTimeout(retry, 300); } };
+  R7Ads.showRewarded(key); return true;
+}
 /* undo: the same nuts fly back to where they came from */
 async function undoMove(){
   if(busy || !history.length) return;
-  if(inv.undo <= 0){ openShop(); return; }
+  if(inv.undo <= 0){ if(!r7NeedItem('undo', undoMove)) openShop(); return; }
   const ep = epoch; busy = true; clearHint();
   if(selected !== -1){ const s = selected; selected = -1; await lowerNut(s); if(ep !== epoch) return; }
   const m = history.pop(); inv.undo--; saveInv(); redoStack.push({a: m.a, b: m.b});
@@ -614,7 +622,7 @@ async function undoMove(){
 }
 async function redoMove(){
   if(busy || !redoStack.length) return;
-  if(inv.redo <= 0){ openShop(); return; }
+  if(inv.redo <= 0){ if(!r7NeedItem('redo', redoMove)) openShop(); return; }
   const ep = epoch, r = redoStack[redoStack.length - 1];
   if(!canMove(r.a, r.b)){ redoStack = []; refreshUI(); return; }
   busy = true; clearHint();
@@ -818,7 +826,7 @@ function tutor(){
 function clearHint(){ hideHand(); document.querySelectorAll('.hit.hintB').forEach(h => h.classList.remove('hintB')); }
 $('#bHint').onclick = async () => {
   if(busy) return;
-  if(inv.hint <= 0){ openShop(); return; }
+  if(inv.hint <= 0){ if(!r7NeedItem('hint', () => $('#bHint').onclick())) openShop(); return; }
   const h = solveHint(); if(!h){ toast('Koi move nahi bacha. Undo ya extra bolt use karo.'); return; }
   inv.hint--; saveInv(); clearHint(); busy = true; refreshUI(); sfx.tap();
   const ep = epoch;
@@ -831,6 +839,7 @@ $('#bHint').onclick = async () => {
 
 /* ---- victory ---- */
 function showVictory(done, reward){
+  try{window.R7Ads&&R7Ads.gameEnd()}catch(e){}
   const fin = done >= MAX_LEVEL;   // last level: finale instead of "next level"
   $('#winT').textContent = fin ? '\u{1F3C6} Saare ' + MAX_LEVEL + ' level poore!' : 'Level ' + done + ' complete';
   $('#winPrize').textContent = fin ? 'Aapne poora game jeet liya. Badhai ho!' : '';
@@ -864,7 +873,7 @@ $('#bUndo').onclick = () => { sfx.tap(); undoMove(); };
 $('#bRedo').onclick = () => { sfx.tap(); redoMove(); };
 $('#bAdd').onclick = () => {
   if(busy) return;
-  if(inv.bolt <= 0){ openShop(); return; }
+  if(inv.bolt <= 0){ if(!r7NeedItem('bolt', () => $('#bAdd').onclick())) openShop(); return; }
   if(state.length >= 20){ toast('Aur bolt nahi jud sakta.'); return; }
   inv.bolt--; saveInv(); state.push([]); selected = -1; clearHint(); sfx.tap();
   geom(); buildBolts(); layout(false); refreshUI(); saveGame();

@@ -484,7 +484,7 @@ function showOver(t,bs,o){
     reveal();
   };
   setTimeout(()=>{
-    over.style.display='flex';over.classList.remove('in');void over.offsetWidth;over.classList.add('in');
+    over.style.display='flex';over.classList.remove('in');void over.offsetWidth;over.classList.add('in');try{window.R7Ads&&R7Ads.gameEnd()}catch(e){};
     sfx(o.win?'game_win':'game_over',1);
     if(o.win){
       party(40);

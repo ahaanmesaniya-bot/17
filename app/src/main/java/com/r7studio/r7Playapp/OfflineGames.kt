@@ -48,6 +48,18 @@ object OfflineGames {
         return g.copy(url = BASE + l.page, logo = l.icon, hero = l.banner, openInNewTab = false)
     }
 
+    /** true for bundled games and for online pages on one of Config.AD_TRUSTED_HOSTS */
+    fun adsAllowed(url: String): Boolean {
+        val u = url.trim()
+        if (isLocalUrl(u)) return true
+        return try {
+            val uri = Uri.parse(u)
+            uri.scheme.equals("https", true) && (uri.host?.lowercase() in Config.AD_TRUSTED_HOSTS)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun isLocalUrl(url: String): Boolean = url.trim().startsWith(BASE, ignoreCase = true)
 
     /** Used only when the phone has no internet AND no saved games list yet (first start offline). */

@@ -199,9 +199,9 @@ private fun buildGame(
     s.setSupportZoom(false)
     s.builtInZoomControls = false
     s.textZoom = 100
-    // Only games packed inside the app (no network, served from the APK) may talk to the ads.
-    // Online games get NO bridge, so no web page can ever call into the app.
-    if (OfflineGames.isLocalUrl(game.url)) {
+    // Only bundled games and online games on YOUR trusted hosts (Config.AD_TRUSTED_HOSTS) may talk to the ads.
+    // Every other web page gets NO bridge.
+    if (OfflineGames.adsAllowed(game.url)) {
         web.addJavascriptInterface(AdBridge(store, web), "R7Ads")
     }
 

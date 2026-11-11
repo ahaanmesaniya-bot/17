@@ -145,7 +145,7 @@ img{-webkit-user-drag:none;user-select:none}
  <div class="row"><img data-i="eraser" alt=""><span id="ex"></span><button class="buy" id="b2">🪙 150</button></div>
  <div class="row"><span style="flex:0;font-size:44px;width:56px;text-align:center">❤️</span><span id="sx"></span><button class="buy" id="b4">🪙 80</button></div>
 </div></div>
-<div id="ov"><canvas id="cf"></canvas><div id="ovh"></div><h2 id="ovt"></h2><div id="stars"></div><img id="snap" alt=""><button id="ovb"></button><button id="ovm">Main</button><img id="nxt" data-i="next" alt=""><img id="hm2" data-i="home" alt=""></div>
+<div id="ov"><canvas id="cf"></canvas><div id="ovh"></div><h2 id="ovt"></h2><div id="stars"></div><img id="snap" alt=""><button id="ovb"></button><button id="ovr" style="display:none;margin-top:10px;padding:12px 22px;border:0;border-radius:30px;background:#ffd23f;color:#5a3a00;font-weight:800;font-size:18px;box-shadow:0 4px 0 #b07a00">▶ Watch ad: +1 ❤️ &amp; continue</button><button id="ovm">Main</button><img id="nxt" data-i="next" alt=""><img id="hm2" data-i="home" alt=""></div>
 <div id="glow"></div><div id="gl2"></div>
 <div id="wd"><div style="font-size:54px">🥳</div>Well Done!</div>
 <script>
@@ -324,8 +324,14 @@ function confetti(sad){const c=$('cf');c.width=innerWidth;c.height=innerHeight;c
     if(++f<520&&$('ov').style.display=='flex')requestAnimationFrame(t);else x.clearRect(0,0,c.width,c.height)})()}
 function show(t,b,lose){$('nxt').src=lose?IMG.reset:IMG.next;$('ovh').textContent=lose?'Better Luck':'Train Your Brain';$('snap').style.display='block';$('snap').src=snapImg();
   const n=Math.max(1,hearts);$('stars').innerHTML=[0,1,2].map(i=>'<span style="animation-delay:'+(.4+i*.35)+'s;'+(!lose&&i<n?'':'filter:grayscale(1)')+'">⭐</span>').join('');
-  if(!lose)for(let i=0;i<n;i++)setTimeout(()=>SFX.star(i),400+i*350);$('ovt').textContent=t;$('ovb').textContent=b;$('ov').className=lose?'lose':'';$('ov').style.display='flex'}
-$('nxt').onclick=()=>$('ov').className==='lose'?start(true):start();$('hm2').onclick=goHome;
+  if(!lose)for(let i=0;i<n;i++)setTimeout(()=>SFX.star(i),400+i*350);$('ovt').textContent=t;$('ovb').textContent=b;$('ov').className=lose?'lose':'';$('ov').style.display='flex';
+  {const rb=$('ovr');rb.style.display=(lose&&window.R7Ads&&R7Ads.hasRewarded())?'block':'none';rb.disabled=false}
+  try{window.R7Ads&&R7Ads.gameEnd()}catch(e){}}
+$('nxt').onclick=()=>$('ov').className==='lose'?start(true):start();
+/* R7 Play ads: game over -> watch a video, get 1 life back and keep playing */
+$('ovr').onclick=()=>{if(window.R7Ads){$('ovr').disabled=true;R7Ads.showRewarded('taacont')}};
+window.r7AdResult=(tag,ok)=>{if(tag!=='taacont')return;const b=$('ovr');if(!ok){if(b)b.disabled=false;return}
+  hearts=1;over=false;arrows.forEach(x=>{x.red=false});$('game').classList.remove('shake');$('ov').style.display='none';$('ov').className='';ui()};$('hm2').onclick=goHome;
 function tap(cx,cy){
   if(over)return;const r=cv.getBoundingClientRect();
   let i,bd=.95;const kk=r.width/N,fx=(cx-r.left)/kk,fy=(cy-r.top)/kk,x0=Math.floor(fx),y0=Math.floor(fy);

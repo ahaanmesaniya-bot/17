@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
         store = Store(this)
         R7Fonts.load(this)
         hideBars()
+        store.ads = AdManager(this, store).also { it.start() }
         setContent { R7App(store) }
     }
 
@@ -46,12 +47,20 @@ class MainActivity : ComponentActivity() {
         store.paused = false
         hideBars()
         store.gameView?.onResume()
+        store.ads?.resume()
     }
 
     override fun onPause() {
         store.paused = true
         store.gameView?.onPause()
+        store.ads?.pause()
         try { android.webkit.CookieManager.getInstance().flush() } catch (e: Throwable) { }
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        store.ads?.destroy()
+        store.ads = null
+        super.onDestroy()
     }
 }

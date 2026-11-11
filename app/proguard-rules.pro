@@ -28,3 +28,7 @@
 -dontwarn kotlinx.coroutines.**
 -keepclassmembers class kotlinx.coroutines.** { volatile <fields>; }
 -dontwarn org.slf4j.**
+
+# AdMob JS bridge (called from the bundled HTML games)
+-keepclassmembers class com.r7studio.r7Playapp.AdBridge { @android.webkit.JavascriptInterface <methods>; }
+-dontwarn com.google.android.gms.**

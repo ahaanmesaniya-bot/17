@@ -52,7 +52,9 @@ val TX: Map<String, Map<String, String>> = mapOf(
         "cleared" to "Cleared",
         "noWebView" to "This phone's web engine (Android System WebView) is missing or disabled. Please enable or update it in Play Store.",
         "gameCrash" to "The game ran out of memory and closed. Close other apps and try again.",
-        "oldWeb" to "Update \"Android System WebView\" in Play Store so games and ads work properly."
+        "oldWeb" to "Update \"Android System WebView\" in Play Store so games and ads work properly.",
+        "adWait" to "Ad is not ready yet. Please try again in a moment.",
+        "adSkip" to "Watch the full video to get the reward."
     ),
     "hi" to mapOf(
         "home" to "होम", "explore" to "खोजें", "top" to "टॉप", "recent" to "हाल के",
@@ -74,7 +76,9 @@ val TX: Map<String, Map<String, String>> = mapOf(
         "cleared" to "हटा दिया",
         "noWebView" to "इस फ़ोन का वेब इंजन (Android System WebView) बंद या गायब है। कृपया उसे चालू या अपडेट करें।",
         "gameCrash" to "मेमोरी कम पड़ने से गेम बंद हो गया। दूसरे ऐप बंद करके फिर कोशिश करें।",
-        "oldWeb" to "गेम और विज्ञापन सही चलें, इसके लिए Play Store में \"Android System WebView\" अपडेट करें।"
+        "oldWeb" to "गेम और विज्ञापन सही चलें, इसके लिए Play Store में \"Android System WebView\" अपडेट करें।",
+        "adWait" to "विज्ञापन अभी तैयार नहीं है। थोड़ी देर बाद फिर कोशिश करें।",
+        "adSkip" to "इनाम पाने के लिए पूरा वीडियो देखें।"
     )
 )
 
@@ -232,6 +236,8 @@ class Store(context: Context) {
 
     // game player hooks
     var gameView: WebView? = null
+    /** AdMob manager (banner / interstitial / rewarded); created in MainActivity */
+    var ads: AdManager? = null
     @Volatile var paused = false
     /** Links set from the admin panel (games.json: privacyUrl / termsUrl / aboutUrl). Empty = not set. */
     var privacyUrl by mutableStateOf("")

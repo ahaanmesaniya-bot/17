@@ -793,8 +793,21 @@ var ASSETS={"add": "data:image/webp;base64,UklGRkwgAABXRUJQVlA4WAoAAAAQAAAAawIAu
     hideOverlays();
     newQ();
   }
+  /* Revive: use an Undo item if you have one, otherwise watch a rewarded video (AdMob, only inside the R7 Play app). */
   function revive() {
+    if (save.inv["undo"] > 0) { if (payFor("undo")) doRevive(); return; }
+    if (window.R7Ads) {
+      if (R7Ads.hasRewarded()) { R7Ads.showRewarded("revive"); }
+      else { toast("Video abhi ready nahi hai, thodi der baad try karo"); }
+      return;
+    }
     if (!payFor("undo")) return;
+    doRevive();
+  }
+  window.r7AdResult = function (tag, ok) {
+    if (tag === "revive" && ok) doRevive();
+  };
+  function doRevive() {
     sfx("buy");
     $("ovOver").classList.remove("on");
     var btns = $("opts").children;

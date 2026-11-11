@@ -4,6 +4,21 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
+// ===== AdMob IDs: paste your REAL ids here (only place to change) =====
+// Debug builds ALWAYS use Google's official TEST ids. Release builds use the real ids below;
+// while any of the 4 real ids is empty, release also uses the TEST ids (safe: no invalid-traffic risk).
+def ADMOB_REAL_APP_ID = ""           // ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY
+def ADMOB_REAL_BANNER = ""           // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+def ADMOB_REAL_INTERSTITIAL = ""     // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+def ADMOB_REAL_REWARDED = ""         // ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ
+
+def ADMOB_TEST_APP_ID = "ca-app-pub-3940256099942544~3347511713"
+def ADMOB_TEST_BANNER = "ca-app-pub-3940256099942544/6300978111"
+def ADMOB_TEST_INTERSTITIAL = "ca-app-pub-3940256099942544/1033173712"
+def ADMOB_TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917"
+def admobUseReal = (ADMOB_REAL_APP_ID != "" && ADMOB_REAL_BANNER != "" &&
+        ADMOB_REAL_INTERSTITIAL != "" && ADMOB_REAL_REWARDED != "")
+
 // ===== Version: change ONLY here for every new Play Store release =====
 def r7VersionCode = 2
 def r7VersionName = "1.1"
@@ -39,7 +54,17 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders = [admobAppId: ADMOB_TEST_APP_ID]
+            buildConfigField "String", "ADMOB_BANNER", "\"${ADMOB_TEST_BANNER}\""
+            buildConfigField "String", "ADMOB_INTERSTITIAL", "\"${ADMOB_TEST_INTERSTITIAL}\""
+            buildConfigField "String", "ADMOB_REWARDED", "\"${ADMOB_TEST_REWARDED}\""
+        }
         release {
+            manifestPlaceholders = [admobAppId: admobUseReal ? ADMOB_REAL_APP_ID : ADMOB_TEST_APP_ID]
+            buildConfigField "String", "ADMOB_BANNER", "\"${admobUseReal ? ADMOB_REAL_BANNER : ADMOB_TEST_BANNER}\""
+            buildConfigField "String", "ADMOB_INTERSTITIAL", "\"${admobUseReal ? ADMOB_REAL_INTERSTITIAL : ADMOB_TEST_INTERSTITIAL}\""
+            buildConfigField "String", "ADMOB_REWARDED", "\"${admobUseReal ? ADMOB_REAL_REWARDED : ADMOB_TEST_REWARDED}\""
             if (canSign) {
                 signingConfig signingConfigs.release
             }
@@ -60,6 +85,7 @@ android {
 
     buildFeatures {
         compose true
+        buildConfig true
     }
 
     lint {
@@ -90,4 +116,7 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
     implementation 'io.coil-kt:coil-compose:2.7.0'
+
+    // Google AdMob (includes the UMP consent SDK)
+    implementation 'com.google.android.gms:play-services-ads:23.6.0'
 }

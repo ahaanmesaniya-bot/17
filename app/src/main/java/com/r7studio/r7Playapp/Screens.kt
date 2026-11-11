@@ -310,6 +310,7 @@ fun HomeScreen(store: Store) {
             val fresh = remember(g) { g.filter { it.isNew } }
             LazyColumn(Modifier.pageWidth(), contentPadding = PagePad) {
                 item { Hero(store, hero) }
+                item { BannerSlot(store) }
                 if (fresh.isNotEmpty()) {
                     item { SectionTitle(store.t("nw")) }
                     item {

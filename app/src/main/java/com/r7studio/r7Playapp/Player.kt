@@ -199,7 +199,11 @@ private fun buildGame(
     s.setSupportZoom(false)
     s.builtInZoomControls = false
     s.textZoom = 100
-    // (no addJavascriptInterface anywhere: games cannot call into the app)
+    // Only games packed inside the app (no network, served from the APK) may talk to the ads.
+    // Online games get NO bridge, so no web page can ever call into the app.
+    if (OfflineGames.isLocalUrl(game.url)) {
+        web.addJavascriptInterface(AdBridge(store, web), "R7Ads")
+    }
 
     // Very old "Android System WebView" (common on old phones) cannot run modern games / ads.
     try {
@@ -249,6 +253,10 @@ private fun buildGame(
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
+            if (url != null && OfflineGames.isLocalUrl(url)) {
+                // start watching the game's win / game-over screen (for the interstitial ad)
+                view?.evaluateJavascript(GAME_END_HOOK_JS, null)
+            }
             if (!store.gameFail && url != null && url != "about:blank") store.gameFailCount = 0
             onLoaded()
         }

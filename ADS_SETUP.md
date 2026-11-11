@@ -3,7 +3,7 @@
 IDs live in ONE place: `app/build.gradle` (top, "AdMob IDs").
 - Debug build: always Google TEST ids.
 - Release build: ONLY your REAL ids (App, Banner, Interstitial, Rewarded). If any real id is empty / placeholder / test id / wrong format, the release build FAILS on purpose (no silent test ads in a release).
-- SDK: Google Mobile Ads SDK 25.5.0 (needs minSdk 24+, Kotlin 2.1+).
+- SDK: Google Mobile Ads SDK 25.5.0 (needs minSdk 24+, Kotlin 2.3+ (SDK 25.5.0 uses newer Kotlin metadata)).
 - New ad units can take up to ~1 hour before real ads are served ("no fill" until then is normal).
 - Never click your own real ads (use a debug build / test device for testing).
 

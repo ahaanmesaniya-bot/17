@@ -150,6 +150,6 @@ dependencies {
     // secure JS <-> Kotlin channel with origin rules (online games' ads bridge)
     implementation 'androidx.webkit:webkit:1.12.1'
 
-    // Google AdMob (Google Mobile Ads SDK 25.x, includes the UMP consent SDK). 25.x needs minSdk 24+ and Kotlin 2.1+.
+    // Google AdMob (Google Mobile Ads SDK 25.x, includes the UMP consent SDK). 25.x needs minSdk 24+ and Kotlin 2.3+ (SDK 25.5.0 uses newer Kotlin metadata).
     implementation 'com.google.android.gms:play-services-ads:25.5.0'
 }
